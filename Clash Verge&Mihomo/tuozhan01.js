@@ -39,7 +39,7 @@ const CUSTOM_RULES = {
 
 const G = {
   main: '🚀 节点选择',
-  auto: '♻️ 自动选择·最低延迟',
+  auto: '♻️ 自动选择',
   fallback: '🛟 故障转移',
   balance: '⚖️ 负载均衡',
   direct: '🎯 全球直连',
