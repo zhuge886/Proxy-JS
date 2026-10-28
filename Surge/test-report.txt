@@ -1,0 +1,38 @@
+PASS no credentials: notify and zero HTTP
+PASS first App request captures mixed-case Cookie and notifies once
+PASS capture query tokens and update STOKEN
+PASS capture does not mix credentials after App switches accounts
+PASS capture ignores other hosts, internal requests and missing BDUSS
+PASS capture storage failure always passes through and reports failure
+PASS basic flow signs, answers answer=0, refreshes PC balance, reports ETA
+PASS already signed string flags never trigger mutations
+PASS check mode performs zero account mutations even with full native config
+PASS invalid BDUSS stops remaining account tasks
+PASS HTML, HTTP failure, network failure remain errors; other steps continue
+PASS no inferred ETA when dailyGrowth or thresholds absent
+PASS BDUSS-only account skips all taskcenter endpoints
+PASS no native z does not send forged Android params
+PASS web capture CUID supports taskcenter without native z
+PASS web param error cached for 14 days
+PASS native params match RFC MD5, encode device and complete offlinepackage
+PASS native z expiry, wrong account, mismatched UA and incomplete params skip
+PASS native already-signed string=1 does not sign or report device
+PASS risk cooldown persists and stops repeat, fallback and makeup
+PASS native errno=2 does not claim already-signed and stops makeup
+PASS makeup uses most recent missed dates and free cards
+PASS makeup does not spend coins by default
+PASS makeup enforces total coin budget and reserves before submission
+PASS makeup rejects unknown coin price rather than coercing null to zero
+PASS uncertain taskcenter network result blocks subsequent makeup
+PASS legacy fallback only explicitly enabled and version-directed
+PASS Set-Cookie merged per account with domain/path/expiry and no cross-account leak
+PASS per-account rotation makes bounded progress
+PASS active run lock makes zero HTTP calls; expired lock recovered
+PASS explicit account selector runs only that account
+PASS one-time challenge responses are scoped, allowlisted, never persisted
+PASS host-only refresh wins over broad original Cookie without duplicates
+PASS corrupt local config produces actionable notification without secrets
+PASS setup example is inert; clear removes all module data
+PASS module has cron, wake, notification-capable JS and narrow MITM host
+36/36 tests passed (offline Surge API mocks; not iOS/device or live Baidu proof)
+
