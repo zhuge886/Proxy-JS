@@ -72,7 +72,7 @@ const CONFIG = {
       value = Object.assign({}, old, CONFIG, { accounts });
     }
     if (!$persistentStore.write(JSON.stringify(value), key)) throw new Error("保存失败");
-    $notification.post("百度网盘配置", "配置已保存", "共 " + value.accounts.length + " 个账号。先运行 Baidu-Check 检查登录状态。");
+    $notification.post("百度网盘配置", "配置已保存", "共 " + value.accounts.length + " 个账号。打开网盘 App 获取 Cookie 后将自动检查并签到。");
   } catch (e) {
     // 不输出用户输入、JSON 解析错误正文或凭据。
     $notification.post("百度网盘配置", "导入失败", "检查配置格式、id 和 Cookie，或存储空间。未输出凭据。");
