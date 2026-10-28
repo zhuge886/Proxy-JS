@@ -34,5 +34,12 @@ PASS host-only refresh wins over broad original Cookie without duplicates
 PASS corrupt local config produces actionable notification without secrets
 PASS setup example is inert; clear removes all module data
 PASS module has cron, wake, notification-capable JS and narrow MITM host
-36/36 tests passed (offline Surge API mocks; not iOS/device or live Baidu proof)
+PASS capture queues first run and requests separate worker without waiting for it
+PASS already signed capture reports status and suppresses same-day daily repeat
+PASS upgrade with existing cookie schedules one automatic run
+PASS busy worker leaves pending item for later retry
+PASS updated credentials while running remain queued for newer version
+PASS no pending item causes no network and no notification
+PASS timeout and API callback both finish capture only once
+43/43 tests passed (offline Surge API mocks; not iOS/device or live Baidu proof)
 
