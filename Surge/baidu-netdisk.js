@@ -16,6 +16,7 @@
   const PC_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) baidunetdisk/8.8.8 Chrome/108.0.5359.215 Electron/22.3.27 Safari/537.36;netdisk;8.8.8.101;PC;PC-Windows;10.0.26200;WindowsBaiduYunGuanJia";
   const RISK = [8001, 8011, 8024, 9302, 9306, 9312, 35103, 35104];
   const clock = () => Math.floor(Date.now() / 1000);
+  function localDay() { const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
   const enabled = (v, fallback) => v === undefined ? fallback : v === true;
   const int = (v, fallback, lo, hi) => Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Math.floor(Number(v)))) : fallback;
   const flag = v => v === true || v === 1 || v === "1" ? true : v === false || v === 0 || v === "0" ? false : null;
@@ -73,12 +74,18 @@
     const same = old && pairs(old.cookie, /;\s*/).BDUSS === cookies.BDUSS;
     const merged = Object.assign({}, same ? pairs(old.cookie, /;\s*/) : {}, cookies);
     const serialized = Object.keys(merged).filter(k => /^[A-Za-z0-9_-]+$/.test(k) && !/[\r\n;]/.test(merged[k])).map(k => k + "=" + merged[k]).join("; ");
-    const changed = !same || pairs(old.cookie, /;\s*/).STOKEN !== merged.STOKEN;
+    const fingerprint = md5(merged.BDUSS + "\n" + (merged.STOKEN || ""));
+    const changed = !same || old.autoCaptureFingerprint !== fingerprint;
     const account = Object.assign({}, same ? old : {}, { id: same ? old.id : "captured", name: same ? old.name : "App 自动获取", cookie: serialized });
+    if (changed) { account.autoCaptureFingerprint = fingerprint; account.autoCapturePending = fingerprint; }
     const target = config.accounts.findIndex(a => a.id === account.id);
     if (target >= 0) config.accounts[target] = account; else config.accounts.push(account);
-    if (!old || old.cookie !== serialized || !same) write(CONFIG_KEY, config);
-    if (changed) post("Cookie 已获取（待验证）", merged.STOKEN ? "已保存 BDUSS 与 STOKEN。每日 08:30 自动运行；可先手动运行 Baidu-Check。" : "已保存 BDUSS，可执行基础签到。进入 App 的会员／签到页继续获取 STOKEN。");
+    if (!old || old.cookie !== serialized || changed) write(CONFIG_KEY, config);
+    if (changed) {
+      post("Cookie 已保存", merged.STOKEN ? "正在自动启动签到检查，结果将另行通知。" : "正在自动启动基础签到；可继续访问会员页获取 STOKEN。");
+      return true;
+    }
+    return false;
   }
 
   // RFC 1321 MD5；仅用于原协议 rchannel 与本地状态指纹，不作为加密存储。
@@ -456,7 +463,7 @@
     }
     if ((options.ac || options.ds || options.tk) && !options.account) throw new Error("一次性应答必须指定 account，避免用于其他账号");
     const lock = read(LOCK_KEY,{});
-    if (lock.until>clock()) { console.log("已有运行中的任务，跳过重叠触发"); return; }
+    if (lock.until>clock()) { console.log("已有运行中的任务，跳过重叠触发"); return false; }
     const token = md5(String(Date.now())+Math.random());
     write(LOCK_KEY,{token,until:clock()+190});
     try {
@@ -464,9 +471,15 @@
       if (!state.accounts || typeof state.accounts !== "object") throw new Error("账号状态损坏");
       const deadline = Date.now()+165000, check = mode==="check", summaries = [];
       const n = accounts.length, start = check || options.account ? 0 : int(state.cursor,0,0,n-1), max = Math.min(n,int(config.maxAccountsPerRun,2,1,10));
-      let visited = 0;
+      let visited = 0, skippedToday = 0;
       for (let i=0; i<max && Date.now()+15000<deadline; i++) {
         const a = accounts[(start+i)%n];
+        if (!check && !options.fromCapture && a.autoLastCompletedDay===localDay()) {
+          skippedToday++;
+          if (!options.account) state.cursor=(start+i+1)%n;
+          saveState();
+          continue;
+        }
         const key = a.id, bdussHash = md5(pairs(a.cookie,/;\s*/).BDUSS || "");
         // Reset per-slot state if capture replaced credentials with another account.
         if (!state.accounts[key] || state.accounts[key].bdussHash !== bdussHash) state.accounts[key] = {bdussHash};
@@ -477,11 +490,30 @@
         if (!check && !options.account) state.cursor=(start+i+1)%n;
         saveState();
       }
-      if (n>visited) summaries.push("本次处理 "+visited+"/"+n+" 个账号；定时任务按游标轮流处理。增大 maxAccountsPerRun 前请留意运行时限。");
-      if (config.notify!==false || check) post(check ? "只读检查结果" : "每日任务结果",summaries.join("\n\n").slice(0,3600));
+      if (n>visited+skippedToday) summaries.push("本次处理 "+visited+"/"+n+" 个账号；定时任务按游标轮流处理。增大 maxAccountsPerRun 前请留意运行时限。");
+      if (summaries.length && (config.notify!==false || check || options.fromCapture)) post(check ? "只读检查结果" : options.fromCapture ? "获取 Cookie 后的签到结果" : "每日任务结果",summaries.join("\n\n").slice(0,3600));
+      return visited + skippedToday > 0;
     } finally {
       const current = read(LOCK_KEY,{});
       if (current.token===token) $persistentStore.write(null,LOCK_KEY);
+    }
+  }
+  async function pending() {
+    const config = read(CONFIG_KEY,{accounts:[]});
+    if (!Array.isArray(config.accounts)) throw new Error("账号配置格式错误");
+    const list = config.accounts.filter(a => a.autoCapturePending).slice(0,2);
+    for (const account of list) {
+      const fingerprint = account.autoCapturePending;
+      const completed = await main("run",{account:account.id,fromCapture:true});
+      if (!completed) return; // Lock busy: leave the pending item for the next trigger.
+      const current = read(CONFIG_KEY,{accounts:[]});
+      const target = (current.accounts || []).find(a => a.id===account.id);
+      // A newer capture must remain queued, even if this run just completed.
+      if (target && target.autoCapturePending===fingerprint) {
+        delete target.autoCapturePending;
+        target.autoLastCompletedDay = localDay();
+        write(CONFIG_KEY,current);
+      }
     }
   }
   let done = false;
@@ -496,10 +528,18 @@
   }
   const mode = options.mode || "run";
   if (typeof $request !== "undefined") {
-    try { if (mode==="capture") capture(); } catch (_) { post("Cookie 保存失败","请检查本模块本地配置和存储；请求继续正常发送。"); }
-    finish();
+    let queued = false;
+    try { if (mode==="capture") queued = capture(); } catch (_) { post("Cookie 保存失败","请检查本模块本地配置和存储；请求继续正常发送。"); }
+    if (queued && typeof $httpAPI === "function" && typeof setTimeout === "function") {
+      // Never keep the intercepted app request waiting for the full task.
+      // A periodic pending trigger is the fallback if the API call is interrupted.
+      try {
+        setTimeout(finish,1000);
+        $httpAPI("POST","/v1/scripting/cron/evaluate",{script_name:"Baidu-Pending"},finish);
+      } catch (_) { finish(); }
+    } else finish();
   } else {
-    main(mode,options).catch(e => { console.log("运行结束: "+e.message); post("执行未完成",e.message); }).then(finish);
+    (mode === "pending" ? pending() : main(mode,options)).catch(e => { console.log("运行结束: "+e.message); post("执行未完成",e.message); }).then(finish);
   }
 })();
 
