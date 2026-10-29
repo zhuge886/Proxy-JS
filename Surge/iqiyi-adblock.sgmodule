@@ -1,0 +1,46 @@
+#!name=爱奇艺去广告（保守版）
+#!desc=清理首页焦点图、信息流、搜索广告及部分推广弹窗；不保证去除正片贴片广告。需要开启 MITM。
+#!category=去广告
+#!icon=https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/iQiYi_Video.png
+
+[Rule]
+DOMAIN-SUFFIX,ad.m.iqiyi.com,REJECT
+DOMAIN-SUFFIX,afp.iqiyi.com,REJECT
+DOMAIN-SUFFIX,a.ckm.iqiyi.com,REJECT
+
+[Body Rewrite]
+# 首页：移除焦点图、信息流广告卡片及相关统计字段
+http-response-jq ^https:\/\/cards\.iqiyi\.com\/views_home\/3\.0\/qy_home\? 'delpaths([["base","statistics"]])'
+http-response-jq ^https:\/\/cards\.iqiyi\.com\/views_home\/3\.0\/qy_home\? 'del(.cards[] | select(.alias_name == "focus" or .alias_name == "ad_mobile_flow" or .alias_name == "ad_trueview"))'
+
+# 分类页：移除焦点广告卡片
+http-response-jq ^https:\/\/cards\.iqiyi\.com\/views_category\/3\.0\/category_home\? 'del(.base.statistics | select(.ad_str)) | del(.cards[] | select(.alias_name == "entrence_focus" or .alias_name == "ad_trueview"))'
+
+# 信息流：移除广告标记区块
+http-response-jq ^https:\/\/cards\.iqiyi\.com\/waterfall(-plt)?\/3\.0\/feed\? 'del(.base.statistics | select(.ad_str)) | del(.. | select(.block_class?))'
+
+# 播放页：移除广告提示和会员推广卡片，不改动视频播放接口
+http-response-jq ^https:\/\/cards\.iqiyi\.com\/views_plt\/3\.0\/player_tabs_v2\? 'del(.cards[] | select(.alias_name == "play_ad_no_vip" or .alias_name == "play_vip_promotion"))'
+
+# 搜索页：移除搜索广告卡片
+http-response-jq ^https:\/\/cards\.iqiyi\.com\/views_search\/3\.0\/hot_query_search\? '.cards |= map(select(.alias_name as $name | $name != "ad_trueview" and $name != "ad_mobile_flow" and $name != "search_mid_text_ad")) | if .base.statistics.ad_str? then del(.base.statistics) else . end'
+
+# 广告开关配置：关闭部分应用内广告开关
+http-response-jq ^https?:\/\/iface2\.iqiyi\.com\/fusion\/3\.0\/common_switch\? 'delpaths([["content","resource","cast_device_ad"]])'
+http-response-jq ^https?:\/\/iface2\.iqiyi\.com\/fusion\/3\.0\/common_switch\? 'if (getpath(["content","switchs","app_ad"]) | has("app_ad_enable")) then (setpath(["content","switchs","app_ad","app_ad_enable"]; 0)) else . end'
+http-response-jq ^https?:\/\/iface2\.iqiyi\.com\/fusion\/3\.0\/common_switch\? 'if (getpath(["content","switchs","app_ad"]) | has("app_ad_duration")) then (setpath(["content","switchs","app_ad","app_ad_duration"]; 0)) else . end'
+http-response-jq ^https?:\/\/iface2\.iqiyi\.com\/fusion\/3\.0\/common_switch\? 'if (getpath(["content","switchs","ios_tech"]) | has("kPreadAdHintSwitch")) then (setpath(["content","switchs","ios_tech","kPreadAdHintSwitch"]; 0)) else . end'
+http-response-jq ^https?:\/\/iface2\.iqiyi\.com\/fusion\/3\.0\/common_switch\? 'if (getpath(["content","switchs","ios_tech"]) | has("ad_download")) then (setpath(["content","switchs","ios_tech","ad_download"]; 0)) else . end'
+http-response-jq ^https?:\/\/iface2\.iqiyi\.com\/fusion\/3\.0\/common_switch\? 'if (getpath(["content","switchs","m_qiyi_ios_tech"]) | has("KFocusAdVideoPlayTimesIn4G")) then (setpath(["content","switchs","m_qiyi_ios_tech","KFocusAdVideoPlayTimesIn4G"]; 0)) else . end'
+
+# Cupid 广告位：只删除广告位字段，不拦截整个接口
+# 注意：anti-AD 当前也包含 cupid.iqiyi.com；同时启用时，该域名可能先被 REJECT，导致本条改写不触发。
+http-response-jq ^https?:\/\/(kjp|t7z)\.cupid\.iqiyi\.com\/mixer\? 'delpaths([["adSlots"]])'
+
+[Map Local]
+# 屏蔽部分活动弹窗接口，返回空 JSON；不映射视频播放接口
+^https?:\/\/act\.vip\.iqiyi\.com\/interact\/api\/v2\/show\? data-type=text data="{}" status-code=200 header="Content-Type:application/json"
+^https?:\/\/iface2\.iqiyi\.com\/views_pop\/3\.0\/pop_control\? data-type=text data="{}" status-code=200 header="Content-Type:application/json"
+
+[MITM]
+hostname = %APPEND% cards.iqiyi.com, iface2.iqiyi.com, *.cupid.iqiyi.com, act.vip.iqiyi.com
